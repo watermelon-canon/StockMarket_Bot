@@ -4,39 +4,51 @@ import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'rec
 import { TrendingUp, TrendingDown, Target, Zap, Clock, BarChart3 } from 'lucide-react';
 
 function getMarketStatus() {
-  const now = new Date();
-  const ny = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
-  const h = ny.getHours(), m = ny.getMinutes(), day = ny.getDay();
-  if (day === 0 || day === 6) return { status: 'CLOSED', color: 'text-loss', bg: 'bg-loss', label: 'Weekend — Market Closed' };
-  const t = h * 60 + m;
-  if (t >= 570 && t < 600) return { status: 'PRE-MARKET', color: 'text-amber', bg: 'bg-amber', label: 'Pre-Market Session' };
-  if (t >= 600 && t < 960) return { status: 'OPEN', color: 'text-gain', bg: 'bg-gain', label: 'NYSE / NASDAQ Open' };
-  if (t >= 960 && t < 1200) return { status: 'AFTER-HOURS', color: 'text-amber', bg: 'bg-amber', label: 'After-Hours Trading' };
-  return { status: 'CLOSED', color: 'text-loss', bg: 'bg-loss', label: 'Market Closed' };
+  return { status: 'OPEN', color: 'text-gain', bg: 'bg-gain', label: 'Market Open (Simulated)' };
 }
 
 export default function Dashboard() {
   const [summary, setSummary] = useState<any>(null);
   const [trades, setTrades] = useState<any[]>([]);
+  const [allTrades, setAllTrades] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [autoMode, setAutoMode] = useState(false);
   const market = getMarketStatus();
 
   useEffect(() => {
     Promise.all([
       axios.get('/api/portfolio/summary'),
       axios.get('/api/trade/history'),
-    ]).then(([sum, hist]) => {
+      axios.get('/api/auth/me'),
+    ]).then(([sum, hist, me]) => {
       setSummary(sum.data);
       setTrades(hist.data.slice(0, 5));
+      setAllTrades(hist.data);
+      setAutoMode(me.data.settings?.autoTradingEnabled || false);
     }).catch(console.error).finally(() => setLoading(false));
   }, []);
 
-  const equityData = [
-    { time: '09:30', equity: 98500 }, { time: '10:00', equity: 99200 },
-    { time: '11:00', equity: 99800 }, { time: '12:00', equity: 99400 },
-    { time: '13:00', equity: 100200 }, { time: '14:00', equity: 100800 },
-    { time: '15:00', equity: summary?.equity || 100000 },
-  ];
+  const toggleAutoMode = async (enabled: boolean) => {
+    setAutoMode(enabled);
+    try {
+      await axios.put('/api/user/settings', { autoTradingEnabled: enabled });
+    } catch (err) {
+      console.error('Failed to toggle auto mode', err);
+    }
+  };
+
+  const equityData = (() => {
+    if (allTrades.length === 0) return [{ time: 'Start', equity: 1000000 }];
+    let currentEquity = 1000000;
+    const sorted = [...allTrades].sort((a, b) => new Date(a.entryTime).getTime() - new Date(b.entryTime).getTime());
+    return sorted.map(t => {
+      currentEquity += (t.grossPnl || 0);
+      return {
+        time: new Date(t.entryTime).toLocaleDateString([], { month: 'short', day: 'numeric' }),
+        equity: currentEquity
+      };
+    });
+  })();
 
   return (
     <div className="flex-1 flex flex-col h-full">
@@ -59,8 +71,8 @@ export default function Dashboard() {
         </div>
         <div className="flex items-center gap-3">
           <div className="mode-toggle flex">
-            <div className="mode-toggle-active px-4 py-1.5 text-xs cursor-pointer">MANUAL</div>
-            <div className="px-4 py-1.5 text-xs text-smoke cursor-pointer hover:text-mist transition-colors">AUTO</div>
+            <div onClick={() => toggleAutoMode(false)} className={`px-4 py-1.5 text-xs cursor-pointer transition-colors ${!autoMode ? 'mode-toggle-active' : 'text-smoke hover:text-mist'}`}>MANUAL</div>
+            <div onClick={() => toggleAutoMode(true)} className={`px-4 py-1.5 text-xs cursor-pointer transition-colors ${autoMode ? 'mode-toggle-active' : 'text-smoke hover:text-mist'}`}>AUTO</div>
           </div>
         </div>
       </header>

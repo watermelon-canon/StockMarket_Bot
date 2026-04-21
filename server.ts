@@ -310,8 +310,15 @@ async function startServer() {
   app.post('/api/trade/sell', authenticate, async (req: any, res) => {
     const { ticker, qty, price } = req.body;
     try {
-      const trade = await prisma.trade.create({
-        data: { userId: req.user.id, ticker, side: 'SELL', entryPrice: price, qty: qty, status: 'FILLED' }
+      const openTrade = await prisma.trade.findFirst({
+        where: { userId: req.user.id, ticker, side: 'BUY', status: 'FILLED' }
+      });
+      if (!openTrade) return res.status(400).json({ error: 'No open position found to sell' });
+      
+      const grossPnl = (price - openTrade.entryPrice) * qty;
+      const trade = await prisma.trade.update({
+        where: { id: openTrade.id },
+        data: { status: 'CLOSED', exitTime: new Date(), exitReason: 'MANUAL', grossPnl, netPnl: grossPnl }
       });
       res.json({ message: 'Sell order filled (paper)', trade });
     } catch (err: any) { res.status(500).json({ error: err.message }); }
@@ -319,9 +326,15 @@ async function startServer() {
 
   app.post('/api/trade/close/:tradeId', authenticate, async (req: any, res) => {
     try {
+      const openTrade = await prisma.trade.findUnique({ where: { id: req.params.tradeId } });
+      if (!openTrade) return res.status(404).json({ error: 'Trade not found' });
+      const quote: any = await yf.quote(openTrade.ticker);
+      const currentPrice = quote.regularMarketPrice;
+      const grossPnl = (currentPrice - openTrade.entryPrice) * openTrade.qty;
+
       const trade = await prisma.trade.update({
         where: { id: req.params.tradeId },
-        data: { status: 'CLOSED', exitTime: new Date(), exitReason: 'MANUAL' }
+        data: { status: 'CLOSED', exitTime: new Date(), exitReason: 'MANUAL', grossPnl, netPnl: grossPnl }
       });
       res.json({ message: 'Position closed', trade });
     } catch (err: any) { res.status(500).json({ error: err.message }); }
@@ -345,8 +358,8 @@ async function startServer() {
     const totalPnl = closed.reduce((s, t) => s + (t.grossPnl || 0), 0);
     const wins = closed.filter(t => (t.grossPnl || 0) > 0).length;
     res.json({
-      equity: 100000,
-      cashBalance: 100000 - open.reduce((s, t) => s + t.entryPrice * t.qty, 0),
+      equity: 1000000 + totalPnl,
+      cashBalance: 1000000 + totalPnl - open.reduce((s, t) => s + t.entryPrice * t.qty, 0),
       totalTrades: trades.length,
       openPositions: open.length,
       realizedPnl: totalPnl,
@@ -367,6 +380,65 @@ async function startServer() {
   httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
+
+  // Background Auto Trading Engine
+  setInterval(async () => {
+    try {
+      const users = await prisma.user.findMany({ include: { settings: true } });
+      for (const u of users) {
+        if (!u.settings?.autoTradingEnabled) continue;
+        let watchlist = ['AAPL', 'MSFT', 'NVDA'];
+        if (u.settings.watchlist) {
+          try { watchlist = JSON.parse(u.settings.watchlist); } catch {}
+        }
+        
+        const openTrades = await prisma.trade.findMany({ where: { userId: u.id, status: 'FILLED' } });
+        
+        for (const ticker of watchlist) {
+          const sig = await computeSignal(ticker);
+          if (!sig) continue;
+          
+          const openPos = openTrades.find((t: any) => t.ticker === ticker);
+          const currentPrice = sig.price;
+          
+          if (openPos) {
+            const unrealizedPnlPct = ((currentPrice - openPos.entryPrice) / openPos.entryPrice) * 100;
+            const stopLoss = u.settings.stopLossPct || 5;
+            const takeProfit = u.settings.takeProfitPct || 15;
+            
+            let exitReason = '';
+            if (sig.signal === 'STRONG SELL' || sig.signal === 'AVOID') exitReason = 'SIGNAL_REVERSAL';
+            else if (unrealizedPnlPct <= -stopLoss) exitReason = 'STOP_LOSS';
+            else if (unrealizedPnlPct >= takeProfit) exitReason = 'TAKE_PROFIT';
+            
+            if (exitReason) {
+              const grossPnl = (currentPrice - openPos.entryPrice) * openPos.qty;
+              await prisma.trade.update({
+                where: { id: openPos.id },
+                data: { status: 'CLOSED', exitTime: new Date(), exitReason, grossPnl, netPnl: grossPnl }
+              });
+              console.log(`[AUTO-TRADE] Sold ${openPos.qty} ${ticker} for user ${u.email}. Reason: ${exitReason}. PnL: ₹${grossPnl.toFixed(2)}`);
+            }
+          } else {
+            if (sig.signal === 'STRONG BUY' || sig.signal === 'BUY') {
+              if (openTrades.length >= (u.settings.maxPositions || 5)) continue;
+              const maxEquity = u.settings.maxEquityPerTrade || 500000;
+              const qty = Math.floor(maxEquity / currentPrice);
+              if (qty > 0) {
+                await prisma.trade.create({
+                  data: { userId: u.id, ticker, side: 'BUY', entryPrice: currentPrice, qty, status: 'FILLED' }
+                });
+                console.log(`[AUTO-TRADE] Bought ${qty} ${ticker} for user ${u.email} at ₹${currentPrice}`);
+              }
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Auto trade error', err);
+    }
+  }, 60000); // Runs every 60s
+
 }
 
 startServer();
