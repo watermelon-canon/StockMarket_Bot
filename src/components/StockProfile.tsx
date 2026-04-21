@@ -16,6 +16,7 @@ export default function StockProfile() {
   const [timeframe, setTimeframe] = useState('1d');
   const [loading, setLoading] = useState(true);
   const [showTradeModal, setShowTradeModal] = useState(false);
+  const [inWatchlist, setInWatchlist] = useState(false);
   const chartRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -24,18 +25,40 @@ export default function StockProfile() {
     Promise.all([
       axios.get(`/api/stocks/${ticker}/profile`),
       axios.get(`/api/stocks/${ticker}/score`),
-    ]).then(([p, s]) => {
+      axios.get('/api/auth/me'),
+    ]).then(([p, s, me]) => {
       setProfile(p.data);
       setScore(s.data);
+      if (me.data?.settings?.watchlist) {
+        try {
+          const wl = JSON.parse(me.data.settings.watchlist);
+          setInWatchlist(wl.includes(ticker));
+        } catch {}
+      }
     }).catch(console.error).finally(() => setLoading(false));
   }, [ticker]);
 
   useEffect(() => {
     if (!ticker) return;
     axios.get(`/api/stocks/${ticker}/chart?timeframe=${timeframe}`)
-      .then(r => setChartData(r.data))
+      .then(r => {
+        if (Array.isArray(r.data) && r.data.length > 0) {
+          setChartData(r.data);
+        } else {
+          setChartData([]);
+        }
+      })
       .catch(console.error);
   }, [ticker, timeframe]);
+
+  const toggleWatchlist = async () => {
+    try {
+      const res = await axios.post('/api/user/watchlist', { ticker });
+      setInWatchlist(res.data.inWatchlist);
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   useEffect(() => {
     if (!chartData.length || !chartRef.current) return;
@@ -233,7 +256,9 @@ export default function StockProfile() {
           <div className="glass-card p-5 space-y-3">
             <h3 className="text-[10px] font-bold text-smoke uppercase tracking-[0.2em] mb-2">Quick Actions</h3>
             <button className="btn-gain w-full text-sm" onClick={() => setShowTradeModal(true)}>Trade {ticker}</button>
-            <button className="btn-ghost w-full text-sm">Add to Watchlist</button>
+            <button className={`w-full text-sm font-bold py-3 rounded-xl transition-colors ${inWatchlist ? 'bg-carbon text-white border border-iron/20' : 'btn-ghost'}`} onClick={toggleWatchlist}>
+              {inWatchlist ? 'Remove from Watchlist' : 'Add to Watchlist'}
+            </button>
           </div>
         </div>
       </div>

@@ -84,6 +84,33 @@ async function startServer() {
     }
   });
 
+  app.post('/api/user/watchlist', authenticate, async (req: any, res) => {
+    try {
+      const { ticker } = req.body;
+      const user = await prisma.user.findUnique({ where: { id: req.user.id }, include: { settings: true } });
+      let watchlist: string[] = ['AAPL', 'MSFT', 'NVDA', 'TSLA', 'GOOGL', 'AMZN', 'META', 'AMD', 'NFLX', 'JPM', 'V', 'BA', 'DIS', 'INTC', 'PYPL', 'CRM', 'UBER', 'SQ', 'COIN', 'PLTR'];
+      if (user?.settings?.watchlist) {
+        try { const parsed = JSON.parse(user.settings.watchlist); if (parsed.length) watchlist = parsed; } catch {}
+      }
+      
+      if (watchlist.includes(ticker)) {
+        watchlist = watchlist.filter(t => t !== ticker);
+      } else {
+        watchlist.push(ticker);
+      }
+      
+      const settings = await prisma.userSettings.upsert({
+        where: { userId: req.user.id },
+        update: { watchlist: JSON.stringify(watchlist) },
+        create: { userId: req.user.id, watchlist: JSON.stringify(watchlist) }
+      });
+      
+      res.json({ inWatchlist: watchlist.includes(ticker), watchlist });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // --- Signal Engine ---
   async function computeSignal(ticker: string) {
     try {
@@ -286,11 +313,20 @@ async function startServer() {
         period2: new Date(),
         interval: interval as any,
       });
-      const data = (chart.quotes || []).filter((c: any) => c.close).map((c: any) => ({
-        time: Math.floor(new Date(c.date).getTime() / 1000),
-        open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume,
-      }));
-      res.json(data);
+      const data = (chart.quotes || []).filter((c: any) => c.close).map((c: any) => {
+        let timeVal: string | number = Math.floor(new Date(c.date).getTime() / 1000);
+        if (tf === '1d' || tf === '1w') {
+           timeVal = new Date(c.date).toISOString().split('T')[0];
+        }
+        return {
+          time: timeVal,
+          open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume,
+        };
+      });
+      // Lightweight charts requires unique strictly ascending time values
+      const uniqueData = data.filter((v: any, i: number, a: any[]) => a.findIndex(t => t.time === v.time) === i);
+      uniqueData.sort((a: any, b: any) => (a.time > b.time ? 1 : -1));
+      res.json(uniqueData);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
