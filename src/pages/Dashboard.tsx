@@ -81,7 +81,7 @@ export default function Dashboard() {
         {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 stagger-children">
           <StatCard icon={TrendingUp} title="Win Rate" value={`${summary?.winRate || 0}%`} accent="gain" />
-          <StatCard icon={BarChart3} title="Sharpe Ratio" value="—" accent="signal" />
+          <StatCard icon={BarChart3} title="Cash Balance" value={`₹${(summary?.cashBalance || 1000000).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`} accent="signal" />
           <StatCard icon={TrendingDown} title="Realized P&L" value={`₹${(summary?.realizedPnl || 0).toFixed(2)}`}
             accent={(summary?.realizedPnl || 0) >= 0 ? 'gain' : 'loss'} />
           <StatCard icon={Target} title="Open Positions" value={String(summary?.openPositions || 0)} accent="accent" />

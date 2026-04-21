@@ -7,15 +7,20 @@ interface TradeModalProps {
   currentPrice: number;
   isOpen: boolean;
   onClose: () => void;
+  initialSide?: 'BUY' | 'SELL';
 }
 
-export default function TradeModal({ ticker, currentPrice, isOpen, onClose }: TradeModalProps) {
-  const [side, setSide] = useState<'BUY' | 'SELL'>('BUY');
+export default function TradeModal({ ticker, currentPrice, isOpen, onClose, initialSide = 'BUY' }: TradeModalProps) {
+  const [side, setSide] = useState<'BUY' | 'SELL'>(initialSide);
   const [qty, setQty] = useState<number | ''>('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ text: '', type: '' });
 
   if (!isOpen) return null;
+
+  useEffect(() => {
+    if (isOpen) setSide(initialSide);
+  }, [isOpen, initialSide]);
 
   const totalValue = (typeof qty === 'number' ? qty : 0) * currentPrice;
 

@@ -16,6 +16,7 @@ export default function StockProfile() {
   const [timeframe, setTimeframe] = useState('1d');
   const [loading, setLoading] = useState(true);
   const [showTradeModal, setShowTradeModal] = useState(false);
+  const [tradeSide, setTradeSide] = useState<'BUY' | 'SELL'>('BUY');
   const [inWatchlist, setInWatchlist] = useState(false);
   const chartRef = useRef<HTMLDivElement>(null);
 
@@ -269,7 +270,10 @@ export default function StockProfile() {
           {/* Trade actions */}
           <div className="glass-card p-5 space-y-3">
             <h3 className="text-[10px] font-bold text-smoke uppercase tracking-[0.2em] mb-2">Quick Actions</h3>
-            <button className="btn-gain w-full text-sm" onClick={() => setShowTradeModal(true)}>Trade {ticker}</button>
+            <div className="flex gap-2">
+              <button className="btn-gain flex-1 text-sm font-bold py-3 rounded-xl" onClick={() => { setTradeSide('BUY'); setShowTradeModal(true); }}>Buy</button>
+              <button className="btn-loss flex-1 text-sm font-bold py-3 rounded-xl" onClick={() => { setTradeSide('SELL'); setShowTradeModal(true); }}>Sell</button>
+            </div>
             <button className={`w-full text-sm font-bold py-3 rounded-xl transition-colors ${inWatchlist ? 'bg-carbon text-white border border-iron/20' : 'btn-ghost'}`} onClick={toggleWatchlist}>
               {inWatchlist ? 'Remove from Watchlist' : 'Add to Watchlist'}
             </button>
@@ -282,7 +286,8 @@ export default function StockProfile() {
           ticker={ticker!} 
           currentPrice={p?.price || 0} 
           isOpen={showTradeModal} 
-          onClose={() => setShowTradeModal(false)} 
+          onClose={() => setShowTradeModal(false)}
+          initialSide={tradeSide}
         />
       )}
     </div>
