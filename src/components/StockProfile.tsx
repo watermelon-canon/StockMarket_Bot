@@ -5,15 +5,12 @@ import { ArrowLeft, TrendingUp, TrendingDown, Target, Shield, Zap } from 'lucide
 import { createChart, ColorType } from 'lightweight-charts';
 import TradeModal from './TradeModal';
 
-const TIMEFRAMES = ['5m', '15m', '30m', '1h', '1d', '1w'];
-
 export default function StockProfile() {
   const { ticker } = useParams<{ ticker: string }>();
   const navigate = useNavigate();
   const [profile, setProfile] = useState<any>(null);
   const [score, setScore] = useState<any>(null);
   const [chartData, setChartData] = useState<any[]>([]);
-  const [timeframe, setTimeframe] = useState('1d');
   const [loading, setLoading] = useState(true);
   const [showTradeModal, setShowTradeModal] = useState(false);
   const [tradeSide, setTradeSide] = useState<'BUY' | 'SELL'>('BUY');
@@ -41,7 +38,7 @@ export default function StockProfile() {
 
   useEffect(() => {
     if (!ticker) return;
-    axios.get(`/api/stocks/${ticker}/chart?timeframe=${timeframe}`)
+    axios.get(`/api/stocks/${ticker}/chart?timeframe=1d`)
       .then(r => {
         if (Array.isArray(r.data) && r.data.length > 0) {
           setChartData(r.data);
@@ -50,7 +47,7 @@ export default function StockProfile() {
         }
       })
       .catch(console.error);
-  }, [ticker, timeframe]);
+  }, [ticker]);
 
   const toggleWatchlist = async () => {
     try {
@@ -64,7 +61,12 @@ export default function StockProfile() {
   useEffect(() => {
     if (!chartData.length || !chartRef.current) return;
     
-    const validData = chartData.filter(d => d.open != null && d.high != null && d.low != null && d.close != null && d.time != null);
+    let validData = chartData.filter(d => d.open != null && d.high != null && d.low != null && d.close != null && d.time != null);
+    
+    // Ensure strictly ascending unique timestamps
+    validData = validData.filter((v, i, a) => a.findIndex(t => t.time === v.time) === i);
+    validData.sort((a, b) => String(a.time).localeCompare(String(b.time)));
+    
     if (validData.length === 0) return;
 
     chartRef.current.innerHTML = '';
@@ -184,14 +186,6 @@ export default function StockProfile() {
           <div className="glass-card overflow-hidden">
             <div className="flex items-center justify-between p-4 border-b border-iron/20">
               <span className="text-[10px] font-bold text-smoke uppercase tracking-[0.2em]">Price Chart</span>
-              <div className="flex gap-1 bg-obsidian rounded-lg p-0.5">
-                {TIMEFRAMES.map(tf => (
-                  <button key={tf} onClick={() => setTimeframe(tf)}
-                    className={`px-2.5 py-1 text-[10px] font-bold font-mono rounded-md transition-all uppercase ${timeframe === tf ? 'bg-carbon text-snow' : 'text-smoke hover:text-mist'}`}>
-                    {tf}
-                  </button>
-                ))}
-              </div>
             </div>
             <div ref={chartRef} className="w-full h-[450px] bg-abyss" />
           </div>
