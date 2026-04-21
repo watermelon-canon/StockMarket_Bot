@@ -1,0 +1,6 @@
+{
+  "name": "QuantTrade Pro",
+  "description": "Algorithmic Stock Trading Web Application with real-time technical & fundamental analysis engine, Alpaca paper trading, and user portfolio tracking.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}

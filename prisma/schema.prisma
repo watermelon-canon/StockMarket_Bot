@@ -1,0 +1,93 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id            String        @id @default(uuid())
+  name          String
+  email         String        @unique
+  passwordHash  String
+  settings      UserSettings?
+  trades        Trade[]
+  signals       SignalLog[]
+  watchlists    Watchlist[]
+  alerts        Alert[]
+  createdAt     DateTime      @default(now())
+}
+
+model UserSettings {
+  id                String   @id @default(uuid())
+  userId            String   @unique
+  user              User     @relation(fields: [userId], references: [id])
+  alpacaKey         String?
+  alpacaSecret      String?
+  maxEquity         Float    @default(5000)
+  stopLossMargin    Float    @default(0.01)
+  takeProfitMargin  Float    @default(0.01)
+  maxPositions      Int      @default(3)
+  maxDailyLoss      Float    @default(0.05)
+  maxTradesDay      Int      @default(10)
+  autoModeEnabled   Boolean  @default(false)
+  watchlist         String   @default("[]") // JSON string array
+}
+
+model Trade {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+  ticker      String
+  side        String
+  entryPrice  Float
+  exitPrice   Float?
+  qty         Int
+  grossPnl    Float?
+  netPnl      Float?
+  exitReason  String?
+  orderId     String?
+  status      String    @default("OPEN")
+  entryTime   DateTime  @default(now())
+  exitTime    DateTime?
+}
+
+model SignalLog {
+  id               String   @id @default(uuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id])
+  ticker           String
+  compositeScore   Int
+  technicalScore   Int
+  fundamentalScore Int
+  signalType       String
+  stage1Pass       Boolean  @default(false)
+  stage2Pass       Boolean  @default(false)
+  stage3Pass       Boolean  @default(false)
+  stage4Pass       Boolean  @default(false)
+  rsiValue         Float?
+  emaTrend         String?
+  stochasticSignal String?
+  actionTaken      String?
+  timestamp        DateTime @default(now())
+}
+
+model Watchlist {
+  id       String   @id @default(uuid())
+  userId   String
+  user     User     @relation(fields: [userId], references: [id])
+  ticker   String
+  addedAt  DateTime @default(now())
+}
+
+model Alert {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  ticker       String
+  condition    String
+  targetPrice  Float
+  triggered    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+}
