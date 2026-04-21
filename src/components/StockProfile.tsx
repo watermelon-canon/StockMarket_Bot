@@ -62,30 +62,44 @@ export default function StockProfile() {
 
   useEffect(() => {
     if (!chartData.length || !chartRef.current) return;
+    
+    const validData = chartData.filter(d => d.open != null && d.high != null && d.low != null && d.close != null && d.time != null);
+    if (validData.length === 0) return;
+
     chartRef.current.innerHTML = '';
     const chart = createChart(chartRef.current, {
       layout: { background: { type: ColorType.Solid, color: '#0a0c14' }, textColor: '#6b7499', fontFamily: 'JetBrains Mono' },
       grid: { vertLines: { color: '#1c213020' }, horzLines: { color: '#1c213020' } },
-      width: chartRef.current.clientWidth, height: chartRef.current.clientHeight,
+      width: chartRef.current.clientWidth || 800, 
+      height: chartRef.current.clientHeight || 450,
       timeScale: { timeVisible: true, borderColor: '#1c2130' },
       rightPriceScale: { borderColor: '#1c2130' },
       crosshair: { mode: 0 },
     });
+    
     const cs = chart.addCandlestickSeries({
       upColor: '#2dd4a8', downColor: '#f4516c', borderVisible: false,
       wickUpColor: '#2dd4a8', wickDownColor: '#f4516c',
     });
-    cs.setData(chartData as any);
-
-    const vs = chart.addHistogramSeries({
-      priceFormat: { type: 'volume' }, priceScaleId: 'vol',
-    });
-    chart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.85, bottom: 0 } });
-    vs.setData(chartData.map((d: any) => ({
-      time: d.time, value: d.volume, color: d.close >= d.open ? 'rgba(45,212,168,0.15)' : 'rgba(244,81,108,0.15)',
-    })) as any);
-
-    chart.timeScale().fitContent();
+    
+    try {
+      cs.setData(validData as any);
+      
+      const vs = chart.addHistogramSeries({
+        priceFormat: { type: 'volume' }, priceScaleId: 'vol',
+      });
+      chart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.85, bottom: 0 } });
+      
+      vs.setData(validData.map((d: any) => ({
+        time: d.time, 
+        value: Number(d.volume) || 0, 
+        color: d.close >= d.open ? 'rgba(45,212,168,0.15)' : 'rgba(244,81,108,0.15)',
+      })) as any);
+      
+      chart.timeScale().fitContent();
+    } catch (err) {
+      console.error("Lightweight charts error:", err);
+    }
     const ro = new ResizeObserver(() => {
       if (chartRef.current) chart.applyOptions({ width: chartRef.current.clientWidth });
     });
